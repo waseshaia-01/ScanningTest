@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Dashboard - Upload Faces</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+</head>
+<body>
+  <h1>Upload Attendee Faces</h1>
+  <input type="text" id="name" placeholder="Attendee Name">
+  <input type="file" id="image" accept="image/*">
+  <button onclick="uploadFace()">Upload</button>
+  <p id="uploadStatus"></p>
+  <button onclick="window.location.href='index.html'">Go to Scanner</button>
+
+  <script>
+    const SUPABASE_URL = 'https://dorqltesgjhtyoojbnnp.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRvcnFsdGVzZ2podHlvb2pibm5wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU5MDM3NDQsImV4cCI6MjA3MTQ3OTc0NH0.zP5q_E0wxKu_E4XA6RwtHLJaTfNUbxSxGfb3vtfFpMI';
+    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    async function uploadFace() {
+      const name = document.getElementById('name').value;
+      const fileInput = document.getElementById('image');
+      const file = fileInput.files[0];
+
+      if (!name || !file) {
+        alert('Enter name and select image');
+        return;
+      }
+
+      const { data, error } = await supabase.storage
+        .from('faces')
+        .upload(`faces/${file.name}`, file, { upsert: true });
+
+      if (error) {
+        console.error(error);
+        document.getElementById('uploadStatus').innerText = 'Upload failed';
+        return;
+      }
+
+      const { publicUrl } = supabase.storage.from('faces').getPublicUrl(`faces/${file.name}`);
+
+      const { data: dbData, error: dbError } = await supabase
+        .from('attendees')
+        .insert([{ name, image_url: publicUrl }]);
+
+      if (dbError) {
+        console.error(dbError);
+        document.getElementById('uploadStatus').innerText = 'DB insert failed';
+      } else {
+        document.getElementById('uploadStatus').innerText = 'Face uploaded successfully!';
+      }
+    }
+  </script>
+</body>
+</html>
