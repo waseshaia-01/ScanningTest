@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Face Recognition Scanner</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
+</head>
+<body>
+  <h1>Face Recognition Scanner</h1>
+  <video id="video" width="720" height="560" autoplay muted></video>
+  <p id="status"></p>
+  <button onclick="window.location.href='dashboard.html'">Go to Dashboard</button>
+
+  <script>
+    const SUPABASE_URL = 'https://dorqltesgjhtyoojbnnp.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRvcnFsdGVzZ2podHlvb2pibm5wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU5MDM3NDQsImV4cCI6MjA3MTQ3OTc0NH0.zP5q_E0wxKu_E4XA6RwtHLJaTfNUbxSxGfb3vtfFpMI';
+    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    const video = document.getElementById('video');
+    const status = document.getElementById('status');
+
+    Promise.all([
+      faceapi.nets.tinyFaceDetector.loadFromUri('/models'),
+      faceapi.nets.faceRecognitionNet.loadFromUri('/models'),
+      faceapi.nets.faceLandmark68Net.loadFromUri('/models')
+    ]).then(startVideo);
+
+    function startVideo() {
+      navigator.mediaDevices.getUserMedia({ video: {} })
+        .then(stream => video.srcObject = stream)
+        .catch(err => console.error(err));
+    }
+
+    video.addEventListener('play', async () => {
+      const canvas = faceapi.createCanvasFromMedia(video);
+      document.body.append(canvas);
+      const displaySize = { width: video.width, height: video.height };
+      faceapi.matchDimensions(canvas, displaySize);
+
+      const { data: attendees } = await supabase.from('attendees').select('*');
+
+      const labeledDescriptors = await Promise.all(
+        attendees.map(async attendee => {
+          const img = await faceapi.fetchImage(attendee.image_url);
+          const detections = await faceapi.detectSingleFace(img)
+            .withFaceLandmarks()
+            .withFaceDescriptor();
+          return new faceapi.LabeledFaceDescriptors(attendee.name, [detections.descriptor]);
+        })
+      );
+
+      const faceMatcher = new faceapi.FaceMatcher(labeledDescriptors, 0.6);
+
+      setInterval(async () => {
+        const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
+          .withFaceLandmarks()
+          .withFaceDescriptors();
+
+        const resizedDetections = faceapi.resizeResults(detections, displaySize);
+        canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+
+        const results = resizedDetections.map(d => faceMatcher.findBestMatch(d.descriptor));
+        results.forEach((result, i) => {
+          const box = resizedDetections[i].detection.box;
+          const drawBox = new faceapi.draw.DrawBox(box, { label: result.toString() });
+          drawBox.draw(canvas);
+          if(result.label !== 'unknown') {
+            status.innerText = `Recognized: ${result.label}`;
+          }
+        });
+      }, 1000);
+    });
+  </script>
+</body>
+</html>
