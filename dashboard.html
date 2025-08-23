@@ -28,17 +28,19 @@
         return;
       }
 
-      const { data, error } = await supabase.storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
         .from('faces')
-        .upload(`faces/${file.name}`, file, { upsert: true });
-
-      if (error) {
-        console.error(error);
-        document.getElementById('uploadStatus').innerText = 'Upload failed';
+        .upload(file.name, file, { upsert: true }); // NEW CODE: Remove `faces/` prefix
+    
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        document.getElementById('uploadStatus').innerText = 'Upload failed: ' + uploadError.message;
         return;
       }
-
-      const { publicUrl } = supabase.storage.from('faces').getPublicUrl(`faces/${file.name}`);
+    
+      const { data: { publicUrl } } = supabase.storage
+        .from('faces')
+        .getPublicUrl(uploadData.path); 
 
       const { data: dbData, error: dbError } = await supabase
         .from('attendees')
